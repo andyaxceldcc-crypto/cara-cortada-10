@@ -19,18 +19,28 @@ FRAME_PROCESSORS_INTERFACE = [
 
 
 def load_frame_processor_module(frame_processor: str) -> Any:
+    """
+    Carga dinámicamente un módulo de procesamiento de frames dado su nombre.
+    Verifica que el módulo implementa la interfaz esperada (FRAME_PROCESSORS_INTERFACE).
+    Si falla, terminará el proceso.
+    """
     try:
         frame_processor_module = importlib.import_module(f'modules.processors.frame.{frame_processor}')
         for method_name in FRAME_PROCESSORS_INTERFACE:
             if not hasattr(frame_processor_module, method_name):
                 sys.exit()
     except ImportError:
-        print(f"Frame processor {frame_processor} not found")
+        print(f"Procesador de frames {frame_processor} no encontrado")
         sys.exit()
     return frame_processor_module
 
 
 def get_frame_processors_modules(frame_processors: List[str]) -> List[ModuleType]:
+    """
+    Devuelve la lista de módulos de procesadores de frames cargados.
+    Si aún no se han cargado, carga los especificados en la lista frame_processors.
+    Actualiza la lista en función del estado indicado por la UI.
+    """
     global FRAME_PROCESSORS_MODULES
 
     if not FRAME_PROCESSORS_MODULES:
@@ -41,6 +51,10 @@ def get_frame_processors_modules(frame_processors: List[str]) -> List[ModuleType
     return FRAME_PROCESSORS_MODULES
 
 def set_frame_processors_modules_from_ui(frame_processors: List[str]) -> None:
+    """
+    Ajusta los módulos de procesadores de frames basándose en el estado proporcionado
+    por la interfaz de usuario (modules.globals.fp_ui). Añade o elimina módulos según corresponda.
+    """
     global FRAME_PROCESSORS_MODULES
     current_processor_names = [proc.__name__.split('.')[-1] for proc in FRAME_PROCESSORS_MODULES]
 
@@ -52,9 +66,9 @@ def set_frame_processors_modules_from_ui(frame_processors: List[str]) -> None:
                 if frame_processor not in modules.globals.frame_processors:
                      modules.globals.frame_processors.append(frame_processor)
             except SystemExit:
-                 print(f"Warning: Failed to load frame processor {frame_processor} requested by UI state.")
+                 print(f"Advertencia: Falló la carga del procesador de frames {frame_processor} solicitado por el estado de la UI.")
             except Exception as e:
-                 print(f"Warning: Error loading frame processor {frame_processor} requested by UI state: {e}")
+                 print(f"Advertencia: Error al cargar el procesador de frames {frame_processor} solicitado por la UI: {e}")
 
         elif state == False and frame_processor in current_processor_names:
             try:
@@ -64,9 +78,13 @@ def set_frame_processors_modules_from_ui(frame_processors: List[str]) -> None:
                 if frame_processor in modules.globals.frame_processors:
                     modules.globals.frame_processors.remove(frame_processor)
             except Exception as e:
-                 print(f"Warning: Error removing frame processor {frame_processor}: {e}")
+                 print(f"Advertencia: Error al eliminar el procesador de frames {frame_processor}: {e}")
 
 def multi_process_frame(source_path: str, temp_frame_paths: List[str], process_frames: Callable[[str, List[str], Any], None], progress: Any = None) -> None:
+    """
+    Procesa múltiples frames en paralelo usando ThreadPoolExecutor.
+    Cada tarea llama a `process_frames` con source_path y una lista con la ruta del frame.
+    """
     with ThreadPoolExecutor(max_workers=modules.globals.execution_threads) as executor:
         futures = []
         for path in temp_frame_paths:
@@ -77,6 +95,9 @@ def multi_process_frame(source_path: str, temp_frame_paths: List[str], process_f
 
 
 def process_video(source_path: str, frame_paths: list[str], process_frames: Callable[[str, List[str], Any], None]) -> None:
+    """
+    Barra de progreso y gestión del procesamiento de video. Usa tqdm para mostrar progreso.
+    """
     progress_bar_format = '{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}{postfix}]'
     total = len(frame_paths)
     with tqdm(total=total, desc='Processing', unit='frame', dynamic_ncols=True, bar_format=progress_bar_format) as progress:
