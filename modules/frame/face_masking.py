@@ -5,7 +5,7 @@ import modules.globals
 
 def apply_color_transfer(source, target):
     """
-    Apply color transfer from target to source image
+    Aplicar transferencia de color desde la imagen target a la imagen source.
     """
     source = cv2.cvtColor(source, cv2.COLOR_BGR2LAB).astype("float32")
     target = cv2.cvtColor(target, cv2.COLOR_BGR2LAB).astype("float32")
@@ -13,13 +13,13 @@ def apply_color_transfer(source, target):
     source_mean, source_std = cv2.meanStdDev(source)
     target_mean, target_std = cv2.meanStdDev(target)
 
-    # Reshape mean and std to be broadcastable
+    # Reorganizar mean y std para que sean broadcastables
     source_mean = source_mean.reshape(1, 1, 3)
     source_std = source_std.reshape(1, 1, 3)
     target_mean = target_mean.reshape(1, 1, 3)
     target_std = target_std.reshape(1, 1, 3)
 
-    # Perform the color transfer
+    # Realizar la transferencia de color
     source = (source - source_mean) * (target_std / source_std) + target_mean
 
     return cv2.cvtColor(np.clip(source, 0, 255).astype("uint8"), cv2.COLOR_LAB2BGR)
@@ -28,10 +28,10 @@ def create_face_mask(face: Face, frame: Frame) -> np.ndarray:
     mask = np.zeros(frame.shape[:2], dtype=np.uint8)
     landmarks = face.landmark_2d_106
     if landmarks is not None:
-        # Convert landmarks to int32
+        # Convertir landmarks a int32
         landmarks = landmarks.astype(np.int32)
 
-        # Extract facial features
+        # Extraer rasgos faciales
         right_side_face = landmarks[0:16]
         left_side_face = landmarks[17:32]
         right_eye = landmarks[33:42]
@@ -39,12 +39,12 @@ def create_face_mask(face: Face, frame: Frame) -> np.ndarray:
         left_eye = landmarks[87:96]
         left_eye_brow = landmarks[97:105]
 
-        # Calculate padding
+        # Calcular padding
         padding = int(
             np.linalg.norm(right_side_face[0] - left_side_face[-1]) * 0.05
-        )  # 5% of face width
+        )  # 5% del ancho de la cara
 
-        # Create a slightly larger convex hull for padding
+        # Crear un hull convexo ligeramente mayor para el padding
         hull = cv2.convexHull(face_outline)
         hull_padded = []
         for point in hull:
@@ -57,10 +57,10 @@ def create_face_mask(face: Face, frame: Frame) -> np.ndarray:
 
         hull_padded = np.array(hull_padded, dtype=np.int32)
 
-        # Fill the padded convex hull
+        # Rellenar el hull convexo con padding
         cv2.fillConvexPoly(mask, hull_padded, 255)
 
-        # Smooth the mask edges
+        # Suavizar los bordes de la máscara
         mask = cv2.GaussianBlur(mask, (5, 5), 3)
 
     return mask
@@ -98,18 +98,18 @@ def create_lower_mouth_mask(
         ]
         lower_lip_landmarks = landmarks[lower_lip_order].astype(
             np.float32
-        )  # Use float for precise calculations
+        )  # Usar float para cálculos más precisos
 
-        # Calculate the center of the landmarks
+        # Calcular el centro de los landmarks
         center = np.mean(lower_lip_landmarks, axis=0)
 
-        # Expand the landmarks outward using the mouth_mask_size
+        # Expandir los landmarks hacia afuera usando mouth_mask_size
         expansion_factor = (
             1 + modules.globals.mask_down_size * modules.globals.mouth_mask_size
-        )  # Adjust expansion based on slider
+        )  # Ajuste de expansión según slider
         expanded_landmarks = (lower_lip_landmarks - center) * expansion_factor + center
 
-        # Extend the top lip part
+        # Extender la parte superior del labio
         toplip_indices = [
             20,
             0,
@@ -118,16 +118,16 @@ def create_lower_mouth_mask(
             3,
             4,
             5,
-        ]  # Indices for landmarks 2, 65, 66, 62, 70, 69, 18
+        ]  # Índices para landmarks 2, 65, 66, 62, 70, 69, 18
         toplip_extension = (
             modules.globals.mask_size * modules.globals.mouth_mask_size * 0.5
-        )  # Adjust extension based on slider
+        )  # Ajuste de extensión según slider
         for idx in toplip_indices:
             direction = expanded_landmarks[idx] - center
             direction = direction / np.linalg.norm(direction)
             expanded_landmarks[idx] += direction * toplip_extension
 
-        # Extend the bottom part (chin area)
+        # Extender la parte inferior (zona del mentón)
         chin_indices = [
             11,
             12,
@@ -135,48 +135,48 @@ def create_lower_mouth_mask(
             14,
             15,
             16,
-        ]  # Indices for landmarks 21, 22, 23, 24, 0, 8
-        chin_extension = 2 * 0.2  # Adjust this factor to control the extension
+        ]  # Índices para landmarks 21, 22, 23, 24, 0, 8
+        chin_extension = 2 * 0.2  # Ajustar este factor para controlar la extensión
         for idx in chin_indices:
             expanded_landmarks[idx][1] += (
                 expanded_landmarks[idx][1] - center[1]
             ) * chin_extension
 
-        # Convert back to integer coordinates
+        # Convertir de nuevo a coordenadas enteras
         expanded_landmarks = expanded_landmarks.astype(np.int32)
 
-        # Calculate bounding box for the expanded lower mouth
+        # Calcular bounding box para la parte inferior expandida de la boca
         min_x, min_y = np.min(expanded_landmarks, axis=0)
         max_x, max_y = np.max(expanded_landmarks, axis=0)
 
-        # Add some padding to the bounding box
-        padding = int((max_x - min_x) * 0.1)  # 10% padding
+        # Añadir un poco de padding al bounding box
+        padding = int((max_x - min_x) * 0.1)  # 10% de padding
         min_x = max(0, min_x - padding)
         min_y = max(0, min_y - padding)
         max_x = min(frame.shape[1], max_x + padding)
         max_y = min(frame.shape[0], max_y + padding)
 
-        # Ensure the bounding box dimensions are valid
+        # Asegurar que las dimensiones del bounding box sean válidas
         if max_x <= min_x or max_y <= min_y:
             if (max_x - min_x) <= 1:
                 max_x = min_x + 1
             if (max_y - min_y) <= 1:
                 max_y = min_y + 1
 
-        # Create the mask
+        # Crear la máscara
         mask_roi = np.zeros((max_y - min_y, max_x - min_x), dtype=np.uint8)
         cv2.fillPoly(mask_roi, [expanded_landmarks - [min_x, min_y]], 255)
 
-        # Apply Gaussian blur to soften the mask edges
+        # Aplicar Gaussian blur para suavizar los bordes de la máscara
         mask_roi = cv2.GaussianBlur(mask_roi, (15, 15), 5)
 
-        # Place the mask ROI in the full-sized mask
+        # Colocar la máscara ROI en la máscara completa
         mask[min_y:max_y, min_x:max_x] = mask_roi
 
-        # Extract the masked area from the frame
+        # Extraer el área enmascarada del frame
         mouth_cutout = frame[min_y:max_y, min_x:max_x].copy()
 
-        # Return the expanded lower lip polygon in original frame coordinates
+        # Devolver el polígono expandido de la parte inferior del labio en coordenadas del frame original
         lower_lip_polygon = expanded_landmarks
 
     return mask, mouth_cutout, (min_x, min_y, max_x, max_y), lower_lip_polygon
@@ -186,15 +186,15 @@ def create_eyes_mask(face: Face, frame: Frame) -> (np.ndarray, np.ndarray, tuple
     eyes_cutout = None
     landmarks = face.landmark_2d_106
     if landmarks is not None:
-        # Left eye landmarks (87-96) and right eye landmarks (33-42)
+        # Landmarks ojo izquierdo (87-96) y ojo derecho (33-42)
         left_eye = landmarks[87:96]
         right_eye = landmarks[33:42]
         
-        # Calculate centers and dimensions for each eye
+        # Calcular centros y dimensiones para cada ojo
         left_eye_center = np.mean(left_eye, axis=0).astype(np.int32)
         right_eye_center = np.mean(right_eye, axis=0).astype(np.int32)
         
-        # Calculate eye dimensions with size adjustment
+        # Calcular dimensiones del ojo con ajuste de tamaño
         def get_eye_dimensions(eye_points):
             x_coords = eye_points[:, 0]
             y_coords = eye_points[:, 1]
@@ -205,95 +205,95 @@ def create_eyes_mask(face: Face, frame: Frame) -> (np.ndarray, np.ndarray, tuple
         left_width, left_height = get_eye_dimensions(left_eye)
         right_width, right_height = get_eye_dimensions(right_eye)
         
-        # Add extra padding
+        # Añadir padding extra
         padding = int(max(left_width, right_width) * 0.2)
         
-        # Calculate bounding box for both eyes
+        # Calcular bounding box para ambos ojos
         min_x = min(left_eye_center[0] - left_width//2, right_eye_center[0] - right_width//2) - padding
         max_x = max(left_eye_center[0] + left_width//2, right_eye_center[0] + right_width//2) + padding
         min_y = min(left_eye_center[1] - left_height//2, right_eye_center[1] - right_height//2) - padding
         max_y = max(left_eye_center[1] + left_height//2, right_eye_center[1] + right_height//2) + padding
         
-        # Ensure coordinates are within frame bounds
+        # Asegurar que las coordenadas estén dentro del frame
         min_x = max(0, min_x)
         min_y = max(0, min_y)
         max_x = min(frame.shape[1], max_x)
         max_y = min(frame.shape[0], max_y)
         
-        # Create mask for the eyes region
+        # Crear máscara para la región de ojos
         mask_roi = np.zeros((max_y - min_y, max_x - min_x), dtype=np.uint8)
         
-        # Draw ellipses for both eyes
+        # Dibujar elipses para ambos ojos
         left_center = (left_eye_center[0] - min_x, left_eye_center[1] - min_y)
         right_center = (right_eye_center[0] - min_x, right_eye_center[1] - min_y)
         
-        # Calculate axes lengths (half of width and height)
+        # Calcular ejes (mitad de width y height)
         left_axes = (left_width//2, left_height//2)
         right_axes = (right_width//2, right_height//2)
         
-        # Draw filled ellipses
+        # Dibujar elipses rellenadas
         cv2.ellipse(mask_roi, left_center, left_axes, 0, 0, 360, 255, -1)
         cv2.ellipse(mask_roi, right_center, right_axes, 0, 0, 360, 255, -1)
         
-        # Apply Gaussian blur to soften mask edges
+        # Aplicar Gaussian blur para suavizar los bordes
         mask_roi = cv2.GaussianBlur(mask_roi, (15, 15), 5)
         
-        # Place the mask ROI in the full-sized mask
+        # Colocar la máscara ROI en la máscara completa
         mask[min_y:max_y, min_x:max_x] = mask_roi
         
-        # Extract the masked area from the frame
+        # Extraer el recorte de la imagen para los ojos
         eyes_cutout = frame[min_y:max_y, min_x:max_x].copy()
         
-        # Create polygon points for visualization
+        # Crear puntos poligonales para visualización
         def create_ellipse_points(center, axes):
             t = np.linspace(0, 2*np.pi, 32)
             x = center[0] + axes[0] * np.cos(t)
             y = center[1] + axes[1] * np.sin(t)
             return np.column_stack((x, y)).astype(np.int32)
         
-        # Generate points for both ellipses
+        # Generar puntos para ambas elipses
         left_points = create_ellipse_points((left_eye_center[0], left_eye_center[1]), (left_width//2, left_height//2))
         right_points = create_ellipse_points((right_eye_center[0], right_eye_center[1]), (right_width//2, right_height//2))
         
-        # Combine points for both eyes
+        # Combinar puntos de ambos ojos
         eyes_polygon = np.vstack([left_points, right_points])
         
     return mask, eyes_cutout, (min_x, min_y, max_x, max_y), eyes_polygon
 
 def create_curved_eyebrow(points):
     if len(points) >= 5:
-        # Sort points by x-coordinate
+        # Ordenar puntos por coordenada x
         sorted_idx = np.argsort(points[:, 0])
         sorted_points = points[sorted_idx]
         
-        # Calculate dimensions
+        # Calcular dimensiones
         x_min, y_min = np.min(sorted_points, axis=0)
         x_max, y_max = np.max(sorted_points, axis=0)
         width = x_max - x_min
         height = y_max - y_min
         
-        # Create more points for smoother curve
+        # Crear más puntos para una curva más suave
         num_points = 50
         x = np.linspace(x_min, x_max, num_points)
         
-        # Fit quadratic curve through points for more natural arch
+        # Ajustar una curva cuadrática para un arco más natural
         coeffs = np.polyfit(sorted_points[:, 0], sorted_points[:, 1], 2)
         y = np.polyval(coeffs, x)
         
-        # Increased offsets to create more separation
-        top_offset = height * 0.5  # Increased from 0.3 to shift up more
-        bottom_offset = height * 0.2  # Increased from 0.1 to shift down more
+        # Offset aumentados para crear más separación
+        top_offset = height * 0.5  # Aumentado desde 0.3 para subir más
+        bottom_offset = height * 0.2  # Aumentado desde 0.1 para bajar más
         
-        # Create smooth curves
+        # Crear curvas suaves
         top_curve = y - top_offset
         bottom_curve = y + bottom_offset
         
-        # Create curved endpoints with more pronounced taper
+        # Crear extremos curvados con mayor taper
         end_points = 5
-        start_x = np.linspace(x[0] - width * 0.15, x[0], end_points)  # Increased taper
-        end_x = np.linspace(x[-1], x[-1] + width * 0.15, end_points)  # Increased taper
+        start_x = np.linspace(x[0] - width * 0.15, x[0], end_points)  # Taper aumentado
+        end_x = np.linspace(x[-1], x[-1] + width * 0.15, end_points)  # Taper aumentado
         
-        # Create tapered ends
+        # Crear extremos afinados
         start_curve = np.column_stack((
             start_x,
             np.linspace(bottom_curve[0], top_curve[0], end_points)
@@ -303,7 +303,7 @@ def create_curved_eyebrow(points):
             np.linspace(bottom_curve[-1], top_curve[-1], end_points)
         ))
         
-        # Combine all points to form a smooth contour
+        # Combinar todos los puntos para formar un contorno suave
         contour_points = np.vstack([
             start_curve,
             np.column_stack((x, top_curve)),
@@ -311,10 +311,10 @@ def create_curved_eyebrow(points):
             np.column_stack((x[::-1], bottom_curve[::-1]))
         ])
         
-        # Add slight padding for better coverage
+        # Añadir un pequeño padding para mejor cobertura
         center = np.mean(contour_points, axis=0)
         vectors = contour_points - center
-        padded_points = center + vectors * 1.2  # Increased padding slightly
+        padded_points = center + vectors * 1.2  # Padding ligeramente aumentado
         
         return padded_points
     return points
@@ -324,15 +324,15 @@ def create_eyebrows_mask(face: Face, frame: Frame) -> (np.ndarray, np.ndarray, t
     eyebrows_cutout = None
     landmarks = face.landmark_2d_106
     if landmarks is not None:
-        # Left eyebrow landmarks (97-105) and right eyebrow landmarks (43-51)
+        # Landmarks ceja izquierda (97-105) y ceja derecha (43-51)
         left_eyebrow = landmarks[97:105].astype(np.float32)
         right_eyebrow = landmarks[43:51].astype(np.float32)
         
-        # Calculate centers and dimensions for each eyebrow
+        # Calcular centros y dimensiones de cada ceja
         left_center = np.mean(left_eyebrow, axis=0)
         right_center = np.mean(right_eyebrow, axis=0)
         
-        # Calculate bounding box with padding adjusted by size
+        # Calcular bounding box con padding ajustado por tamaño
         all_points = np.vstack([left_eyebrow, right_eyebrow])
         padding_factor = modules.globals.eyebrows_mask_size
         min_x = np.min(all_points[:, 0]) - 25 * padding_factor
@@ -340,54 +340,51 @@ def create_eyebrows_mask(face: Face, frame: Frame) -> (np.ndarray, np.ndarray, t
         min_y = np.min(all_points[:, 1]) - 20 * padding_factor
         max_y = np.max(all_points[:, 1]) + 15 * padding_factor
         
-        # Ensure coordinates are within frame bounds
+        # Asegurar que las coordenadas estén dentro del frame
         min_x = max(0, int(min_x))
         min_y = max(0, int(min_y))
         max_x = min(frame.shape[1], int(max_x))
         max_y = min(frame.shape[0], int(max_y))
         
-        # Create mask for the eyebrows region
+        # Crear máscara para la región de las cejas
         mask_roi = np.zeros((max_y - min_y, max_x - min_x), dtype=np.uint8)
         
         try:
-            # Convert points to local coordinates
+            # Convertir puntos a coordenadas locales
             left_local = left_eyebrow - [min_x, min_y]
             right_local = right_eyebrow - [min_x, min_y]
             
             def create_curved_eyebrow(points):
                 if len(points) >= 5:
-                    # Sort points by x-coordinate
+                    # Ordenar puntos por x
                     sorted_idx = np.argsort(points[:, 0])
                     sorted_points = points[sorted_idx]
                     
-                    # Calculate dimensions
+                    # Calcular dimensiones
                     x_min, y_min = np.min(sorted_points, axis=0)
                     x_max, y_max = np.max(sorted_points, axis=0)
                     width = x_max - x_min
                     height = y_max - y_min
                     
-                    # Create more points for smoother curve
+                    # Crear más puntos para una curva suave
                     num_points = 50
                     x = np.linspace(x_min, x_max, num_points)
                     
-                    # Fit quadratic curve through points for more natural arch
+                    # Ajustar cuadrática para el arco
                     coeffs = np.polyfit(sorted_points[:, 0], sorted_points[:, 1], 2)
                     y = np.polyval(coeffs, x)
                     
-                    # Increased offsets to create more separation
-                    top_offset = height * 0.5  # Increased from 0.3 to shift up more
-                    bottom_offset = height * 0.2  # Increased from 0.1 to shift down more
+                    # Offsets aumentados para separación
+                    top_offset = height * 0.5
+                    bottom_offset = height * 0.2
                     
-                    # Create smooth curves
                     top_curve = y - top_offset
                     bottom_curve = y + bottom_offset
                     
-                    # Create curved endpoints with more pronounced taper
                     end_points = 5
-                    start_x = np.linspace(x[0] - width * 0.15, x[0], end_points)  # Increased taper
-                    end_x = np.linspace(x[-1], x[-1] + width * 0.15, end_points)  # Increased taper
+                    start_x = np.linspace(x[0] - width * 0.15, x[0], end_points)
+                    end_x = np.linspace(x[-1], x[-1] + width * 0.15, end_points)
                     
-                    # Create tapered ends
                     start_curve = np.column_stack((
                         start_x,
                         np.linspace(bottom_curve[0], top_curve[0], end_points)
@@ -397,7 +394,6 @@ def create_eyebrows_mask(face: Face, frame: Frame) -> (np.ndarray, np.ndarray, t
                         np.linspace(bottom_curve[-1], top_curve[-1], end_points)
                     ))
                     
-                    # Combine all points to form a smooth contour
                     contour_points = np.vstack([
                         start_curve,
                         np.column_stack((x, top_curve)),
@@ -405,45 +401,44 @@ def create_eyebrows_mask(face: Face, frame: Frame) -> (np.ndarray, np.ndarray, t
                         np.column_stack((x[::-1], bottom_curve[::-1]))
                     ])
                     
-                    # Add slight padding for better coverage
                     center = np.mean(contour_points, axis=0)
                     vectors = contour_points - center
-                    padded_points = center + vectors * 1.2  # Increased padding slightly
+                    padded_points = center + vectors * 1.2
                     
                     return padded_points
                 return points
             
-            # Generate and draw eyebrow shapes
+            # Generar y dibujar formas de cejas
             left_shape = create_curved_eyebrow(left_local)
             right_shape = create_curved_eyebrow(right_local)
             
-            # Apply multi-stage blurring for natural feathering
-            # First, strong Gaussian blur for initial softening
+            # Aplicar multi-etapa de desenfoque para un feathering natural
+            # Primero, Gaussian fuerte para suavizado inicial
             mask_roi = cv2.GaussianBlur(mask_roi, (21, 21), 7)
             
-            # Second, medium blur for transition areas
+            # Segundo, desenfoque medio para áreas de transición
             mask_roi = cv2.GaussianBlur(mask_roi, (11, 11), 3)
             
-            # Finally, light blur for fine details
+            # Finalmente, desenfoque ligero para detalles finos
             mask_roi = cv2.GaussianBlur(mask_roi, (5, 5), 1)
             
-            # Normalize mask values
+            # Normalizar valores de la máscara
             mask_roi = cv2.normalize(mask_roi, None, 0, 255, cv2.NORM_MINMAX)
             
-            # Place the mask ROI in the full-sized mask
+            # Colocar la máscara ROI en la máscara completa
             mask[min_y:max_y, min_x:max_x] = mask_roi
             
-            # Extract the masked area from the frame
+            # Extraer el recorte de la imagen para las cejas
             eyebrows_cutout = frame[min_y:max_y, min_x:max_x].copy()
             
-            # Combine points for visualization
+            # Combinar puntos para visualización
             eyebrows_polygon = np.vstack([
                 left_shape + [min_x, min_y],
                 right_shape + [min_x, min_y]
             ]).astype(np.int32)
             
         except Exception as e:
-            # Fallback to simple polygons if curve fitting fails
+            # Fallback a polígonos simples si el ajuste de curva falla
             left_local = left_eyebrow - [min_x, min_y]
             right_local = right_eyebrow - [min_x, min_y]
             cv2.fillPoly(mask_roi, [left_local.astype(np.int32)], 255)
@@ -486,11 +481,11 @@ def apply_mask_area(
 
         color_corrected_area = apply_color_transfer(resized_cutout, roi)
 
-        # Create mask for the area
+        # Crear máscara para el área
         polygon_mask = np.zeros(roi.shape[:2], dtype=np.uint8)
         
-        # Split points for left and right parts if needed
-        if len(polygon) > 50:  # Arbitrary threshold to detect if we have multiple parts
+        # Dividir puntos para parte izquierda y derecha si es necesario
+        if len(polygon) > 50:  # Umbral arbitrario para detectar si hay múltiples partes
             mid_point = len(polygon) // 2
             left_points = polygon[:mid_point] - [min_x, min_y]
             right_points = polygon[mid_point:] - [min_x, min_y]
@@ -500,10 +495,10 @@ def apply_mask_area(
             adjusted_polygon = polygon - [min_x, min_y]
             cv2.fillPoly(polygon_mask, [adjusted_polygon], 255)
 
-        # Apply strong initial feathering
+        # Aplicar feathering inicial fuerte
         polygon_mask = cv2.GaussianBlur(polygon_mask, (21, 21), 7)
 
-        # Apply additional feathering
+        # Aplicar feathering adicional
         feather_amount = min(
             30,
             box_width // modules.globals.mask_feather_ratio,
@@ -514,7 +509,7 @@ def apply_mask_area(
         )
         feathered_mask = feathered_mask / feathered_mask.max()
 
-        # Apply additional smoothing to the mask edges
+        # Aplicar suavizado adicional a los bordes de la máscara
         feathered_mask = cv2.GaussianBlur(feathered_mask, (5, 5), 1)
 
         face_mask_roi = face_mask[min_y:max_y, min_x:max_x]
@@ -525,7 +520,7 @@ def apply_mask_area(
             color_corrected_area * combined_mask + roi * (1 - combined_mask)
         ).astype(np.uint8)
 
-        # Apply face mask to blended result
+        # Aplicar máscara de cara al resultado mezclado
         face_mask_3channel = (
             np.repeat(face_mask_roi[:, :, np.newaxis], 3, axis=2) / 255.0
         )
@@ -547,33 +542,33 @@ def draw_mask_visualization(
 
     vis_frame = frame.copy()
 
-    # Ensure coordinates are within frame bounds
+    # Asegurar coordenadas dentro de los límites del frame
     height, width = vis_frame.shape[:2]
     min_x, min_y = max(0, min_x), max(0, min_y)
     max_x, max_y = min(width, max_x), min(height, max_y)
 
-    if draw_method == "ellipse" and len(polygon) > 50:  # For eyes
-        # Split points for left and right parts
+    if draw_method == "ellipse" and len(polygon) > 50:  # Para ojos
+        # Dividir puntos para la parte izquierda y derecha
         mid_point = len(polygon) // 2
         left_points = polygon[:mid_point]
         right_points = polygon[mid_point:]
         
         try:
-            # Fit ellipses to points - need at least 5 points
+            # Ajustar elipses a puntos - se necesitan al menos 5 puntos
             if len(left_points) >= 5 and len(right_points) >= 5:
-                # Convert points to the correct format for ellipse fitting
+                # Convertir puntos al formato float32 correcto para fitEllipse
                 left_points = left_points.astype(np.float32)
                 right_points = right_points.astype(np.float32)
                 
-                # Fit ellipses
+                # Ajustar elipses
                 left_ellipse = cv2.fitEllipse(left_points)
                 right_ellipse = cv2.fitEllipse(right_points)
                 
-                # Draw the ellipses
+                # Dibujar las elipses
                 cv2.ellipse(vis_frame, left_ellipse, (0, 255, 0), 2)
                 cv2.ellipse(vis_frame, right_ellipse, (0, 255, 0), 2)
         except Exception as e:
-            # If ellipse fitting fails, draw simple rectangles as fallback
+            # Si falla fitEllipse, dibujar rectángulos como fallback
             left_rect = cv2.boundingRect(left_points)
             right_rect = cv2.boundingRect(right_points)
             cv2.rectangle(vis_frame, 
@@ -584,9 +579,9 @@ def draw_mask_visualization(
                         (right_rect[0], right_rect[1]),
                         (right_rect[0] + right_rect[2], right_rect[1] + right_rect[3]),
                         (0, 255, 0), 2)
-    else:  # For mouth and eyebrows
-        # Draw the polygon
-        if len(polygon) > 50:  # If we have multiple parts
+    else:  # Para boca y cejas
+        # Dibujar el polígono
+        if len(polygon) > 50:  # Si tenemos múltiples partes
             mid_point = len(polygon) // 2
             left_points = polygon[:mid_point]
             right_points = polygon[mid_point:]
@@ -595,7 +590,7 @@ def draw_mask_visualization(
         else:
             cv2.polylines(vis_frame, [polygon], True, (0, 255, 0), 2, cv2.LINE_AA)
 
-    # Add label
+    # Añadir etiqueta
     cv2.putText(
         vis_frame,
         label,
